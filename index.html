@@ -120,7 +120,7 @@
             flex: 1;
             position: relative;
             overflow: hidden;
-            background: var(--google-grey-bg); /* Slight contrast for editor area */
+            background: var(--google-grey-bg);
         }
 
         .line-numbers {
@@ -146,7 +146,8 @@
             line-height: 1.5;
             resize: none;
             outline: none;
-            white-space: pre;
+            white-space: pre-wrap; 
+            overflow-wrap: break-word; 
             overflow: auto;
             color: var(--text-primary);
             background: var(--google-grey-bg);
@@ -154,7 +155,7 @@
 
         /* --- RESIZER --- */
         .resizer {
-            width: 1px; /* Thinner line */
+            width: 1px;
             background: transparent;
             cursor: col-resize;
             position: relative;
@@ -164,7 +165,6 @@
             align-items: center;
         }
 
-        /* Visual hover area for easier grabbing */
         .resizer::before {
             content: '';
             position: absolute;
@@ -258,6 +258,10 @@
   <p>Click any element here to find it in the code.</p>
   <button onclick="alert('It works!')">Test Button</button>
 </div>
+<br><br><br><br><br><br><br><br><br><br>
+<p>Keep scrolling to test the sync!</p>
+<br><br><br><br><br><br><br><br><br><br>
+<p>Bottom of page.</p>
                 </textarea>
             </div>
         </div>
@@ -276,11 +280,10 @@
         const editor = document.getElementById('editor');
         const lineNumbers = document.getElementById('line-numbers');
         const preview = document.getElementById('preview');
-        
-        // Resizable Elements
-        const resizer = document.getElementById('resizer');
         const editorPane = document.getElementById('editor-pane');
+        const previewPane = document.getElementById('preview-pane');
         const workspace = document.getElementById('workspace');
+        const resizer = document.getElementById('resizer');
 
         // --- 1. Resizable Logic ---
         let isResizing = false;
@@ -288,18 +291,14 @@
         resizer.addEventListener('mousedown', (e) => {
             isResizing = true;
             document.body.style.cursor = 'col-resize';
-            preview.style.pointerEvents = 'none'; // Prevent iframe capturing mouse events
-            // Add a visual cue to the resizer
+            preview.style.pointerEvents = 'none'; 
             resizer.style.background = '#1a73e8';
         });
 
         document.addEventListener('mousemove', (e) => {
             if (!isResizing) return;
-            
             const containerOffset = workspace.offsetLeft;
             const newWidth = e.clientX - containerOffset;
-            
-            // Constrain width
             if (newWidth > 100 && newWidth < workspace.offsetWidth - 100) {
                 editorPane.style.width = `${newWidth}px`;
                 editorPane.style.flex = 'none'; 
@@ -311,7 +310,7 @@
                 isResizing = false;
                 document.body.style.cursor = 'default';
                 preview.style.pointerEvents = 'auto';
-                resizer.style.background = 'transparent'; // Reset color
+                resizer.style.background = 'transparent'; 
             }
         });
 
@@ -321,40 +320,76 @@
             lineNumbers.innerHTML = Array(lines).fill(0).map((_, i) => i + 1).join('<br>');
         };
 
-        const syncScroll = () => {
-            lineNumbers.scrollTop = editor.scrollTop;
-        };
-
         editor.addEventListener('input', updateLineNumbers);
-        editor.addEventListener('scroll', syncScroll);
-        // Initial init
         updateLineNumbers();
 
-        // --- 3. Live Preview & Inspector Logic ---
+        // --- 3. Scroll Sync Logic ---
+        let activePane = null; // Tracks which pane the mouse is over
+
+        // Detect which pane the user is interacting with
+        editorPane.addEventListener('mouseenter', () => { activePane = 'editor'; });
+        previewPane.addEventListener('mouseenter', () => { activePane = 'preview'; });
+        
+        // Editor -> Preview Sync
+        function syncEditorScroll() {
+            if (activePane !== 'editor') return; // Only sync if mouse is over editor
+
+            // 1. Calculate percentage scrolled
+            const percentage = editor.scrollTop / (editor.scrollHeight - editor.clientHeight);
+            
+            // 2. Apply percentage to Iframe
+            const previewWin = preview.contentWindow;
+            // Guard clause in case iframe isn't loaded
+            if (!previewWin || !previewWin.document.body) return;
+
+            const previewHeight = previewWin.document.body.scrollHeight - previewWin.innerHeight;
+            previewWin.scrollTo(0, percentage * previewHeight);
+
+            // Sync Line Numbers too
+            lineNumbers.scrollTop = editor.scrollTop;
+        }
+
+        editor.addEventListener('scroll', syncEditorScroll);
+
+        // Preview -> Editor Sync
+        // (This function will be attached to the iframe window inside updatePreview)
+        function syncPreviewScroll() {
+            if (activePane !== 'preview') return; // Only sync if mouse is over preview
+
+            const previewWin = preview.contentWindow;
+            const previewHeight = previewWin.document.body.scrollHeight - previewWin.innerHeight;
+            const percentage = previewWin.scrollY / previewHeight;
+
+            // Apply to Editor
+            const editorHeight = editor.scrollHeight - editor.clientHeight;
+            editor.scrollTop = percentage * editorHeight;
+        }
+
+
+        // --- 4. Live Preview & Inspector Logic ---
         function updatePreview() {
             const code = editor.value;
             
-            // We inject a script to handle the click events inside the iframe
+            // Capture current scroll position of iframe before refreshing
+            const prevScrollY = preview.contentWindow ? preview.contentWindow.scrollY : 0;
+
             const inspectorScript = `
                 <script>
+                    // Click Inspector
                     document.addEventListener('click', function(e) {
                         e.preventDefault();
                         e.stopPropagation();
-                        
-                        const target = e.target;
-                        // Avoid selecting the body/html tags as they are too generic
                         if(target.tagName === 'BODY' || target.tagName === 'HTML') return;
-
+                        const target = e.target;
                         const data = {
                             tagName: target.tagName.toLowerCase(),
                             text: target.innerText ? target.innerText.substring(0, 20) : '',
                             outerHTML: target.outerHTML
                         };
-
                         window.parent.postMessage({ type: 'element-clicked', data: data }, '*');
                     }, true);
                     
-                    // Add Google-like selection outline on hover
+                    // Hover Outline
                     const style = document.createElement('style');
                     style.innerHTML = "*:hover { outline: 2px solid #1a73e8 !important; cursor: pointer; } body:hover, html:hover { outline: none !important; cursor: default; }";
                     document.head.appendChild(style);
@@ -362,17 +397,24 @@
             `;
 
             const fullContent = code + inspectorScript;
-            
             const doc = preview.contentDocument || preview.contentWindow.document;
+            
             doc.open();
             doc.write(fullContent);
             doc.close();
+
+            // RE-ATTACH SCROLL LISTENER TO NEW IFRAME
+            if(preview.contentWindow) {
+                preview.contentWindow.addEventListener('scroll', syncPreviewScroll);
+                // Restore scroll position so typing doesn't jump to top
+                preview.contentWindow.scrollTo(0, prevScrollY);
+            }
         }
 
         editor.addEventListener('input', updatePreview);
-        updatePreview();
+        updatePreview(); // Initial load
 
-        // --- 4. Reverse Highlight (Inspector) Logic ---
+        // --- 5. Reverse Highlight (Inspector) Logic ---
         window.addEventListener('message', (event) => {
             if (event.data && event.data.type === 'element-clicked') {
                 findAndHighlight(event.data.data);
@@ -383,36 +425,24 @@
             const code = editor.value;
             let index = -1;
 
-            // 1. Try to find by text content first (most accurate for user content)
             if (data.text) {
                 const searchStr = data.text.trim();
                 index = code.indexOf(searchStr);
-                
-                // Backtrack to find the opening tag
                 if (index !== -1) {
                     const tagStart = code.lastIndexOf("<" + data.tagName, index);
                     if (tagStart !== -1) index = tagStart;
                 }
             }
             
-            // 2. Fallback: Find by tag name
-            if (index === -1) {
-                index = code.indexOf("<" + data.tagName);
-            }
+            if (index === -1) index = code.indexOf("<" + data.tagName);
 
-            // 3. Highlight
             if (index !== -1) {
                 editor.focus();
-                
-                // Find close of the tag
                 let end = code.indexOf(">", index) + 1;
                 editor.setSelectionRange(index, end);
                 
-                // Scroll into view logic
-                const lineHeight = 21; // Approx line height for Roboto Mono 14px
+                const lineHeight = 21; 
                 const linesBefore = code.substring(0, index).split("\n").length;
-                
-                // Center the selection
                 editor.scrollTop = (linesBefore * lineHeight) - (editor.clientHeight / 2);
             }
         }
