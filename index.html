@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    
+    <title>Free Live HTML Editor & Real-time Viewer | Pierre Cochart</title>
+    <meta name="description" content="A free, open-source live HTML editor and viewer. Completely client-side with no server uploads. Features real-time preview, drag-to-resize panes, and click-to-highlight code inspection.">
+    <meta name="author" content="Pierre Cochart">
+    <meta name="keywords" content="HTML editor, live preview, web code playground, client side editor, open source html viewer">
+
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet">
+    
+    <style>
+        :root {
+            /* Google Color Palette */
+            --google-blue: #1a73e8;
+            --google-blue-hover: #1765cc;
+            --google-grey-bg: #f8f9fa;
+            --google-border: #dadce0;
+            --text-primary: #202124;
+            --text-secondary: #5f6368;
+            --header-height: 64px;
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            margin: 0;
+            padding: 0;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            font-family: 'Roboto', sans-serif;
+            color: var(--text-primary);
+            overflow: hidden;
+            background: #fff;
+        }
+
+        /* --- HEADER --- */
+        header {
+            height: var(--header-height);
+            background: #fff;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 24px;
+            border-bottom: 1px solid var(--google-border);
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 22px;
+            font-weight: 400;
+            color: var(--text-secondary);
+        }
+        
+        .brand span {
+            color: var(--text-primary);
+            font-weight: 500;
+        }
+
+        /* "Google-style" Button */
+        .bmc-button {
+            text-decoration: none;
+            background-color: var(--google-blue);
+            color: white;
+            padding: 0 24px;
+            height: 36px;
+            border-radius: 4px;
+            font-size: 14px;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background 0.2s, box-shadow 0.2s;
+            box-shadow: 0 1px 2px 0 rgba(60,64,67,0.3), 0 1px 3px 1px rgba(60,64,67,0.15);
+        }
+        
+        .bmc-button:hover {
+            background-color: var(--google-blue-hover);
+            box-shadow: 0 1px 3px 0 rgba(60,64,67,0.3), 0 4px 8px 3px rgba(60,64,67,0.15);
+        }
+
+        /* --- MAIN WORKSPACE --- */
+        .workspace {
+            display: flex;
+            flex: 1;
+            height: calc(100vh - var(--header-height));
+            background: #fff;
+        }
+
+        /* --- EDITOR PANE --- */
+        .editor-pane {
+            width: 50%;
+            display: flex;
+            flex-direction: column;
+            min-width: 200px;
+            border-right: 1px solid var(--google-border);
+        }
+
+        .pane-header {
+            height: 40px;
+            display: flex;
+            align-items: center;
+            padding: 0 16px;
+            background: #fff;
+            border-bottom: 1px solid var(--google-border);
+            font-size: 12px;
+            font-weight: 500;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .code-wrapper {
+            display: flex;
+            flex: 1;
+            position: relative;
+            overflow: hidden;
+            background: var(--google-grey-bg); /* Slight contrast for editor area */
+        }
+
+        .line-numbers {
+            width: 48px;
+            background: var(--google-grey-bg);
+            text-align: right;
+            padding: 16px 8px;
+            font-family: 'Roboto Mono', monospace;
+            font-size: 14px;
+            color: #bdc1c6;
+            line-height: 1.5;
+            user-select: none;
+            overflow: hidden;
+            border-right: 1px solid transparent; 
+        }
+
+        textarea {
+            flex: 1;
+            border: none;
+            padding: 16px;
+            font-family: 'Roboto Mono', monospace;
+            font-size: 14px;
+            line-height: 1.5;
+            resize: none;
+            outline: none;
+            white-space: pre;
+            overflow: auto;
+            color: var(--text-primary);
+            background: var(--google-grey-bg);
+        }
+
+        /* --- RESIZER --- */
+        .resizer {
+            width: 1px; /* Thinner line */
+            background: transparent;
+            cursor: col-resize;
+            position: relative;
+            z-index: 10;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        /* Visual hover area for easier grabbing */
+        .resizer::before {
+            content: '';
+            position: absolute;
+            width: 12px;
+            height: 100%;
+            left: -6px;
+            cursor: col-resize;
+        }
+
+        .resizer:hover {
+            background: var(--google-blue);
+        }
+
+        /* --- PREVIEW PANE --- */
+        .preview-pane {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background: white;
+            min-width: 200px;
+        }
+
+        iframe {
+            flex: 1;
+            width: 100%;
+            height: 100%;
+            border: none;
+            background: #fff;
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <div class="brand">
+            HTML<span>Editor</span>
+        </div>
+        
+        <a href="https://www.buymeacoffee.com/PierreCochart" target="_blank" class="bmc-button">
+            ☕ Buy me a coffee
+        </a>
+    </header>
+
+    <div class="workspace" id="workspace">
+        
+        <div class="editor-pane" id="editor-pane">
+            <div class="pane-header">Source Code (Index.html)</div>
+            <div class="code-wrapper">
+                <div class="line-numbers" id="line-numbers">1</div>
+                <textarea id="editor" spellcheck="false" placeholder="Type your HTML code here...">
+<style>
+  body { 
+    font-family: 'Arial', sans-serif; 
+    display: flex; 
+    flex-direction: column;
+    justify-content: center; 
+    align-items: center; 
+    height: 100vh; 
+    margin: 0; 
+    background-color: #f1f3f4;
+  }
+  
+  .card {
+    background: white;
+    padding: 40px;
+    border-radius: 8px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24);
+    text-align: center;
+  }
+
+  h1 { color: #202124; margin-bottom: 10px; }
+  p { color: #5f6368; line-height: 1.5; }
+
+  button { 
+    background-color: #1a73e8; 
+    color: white; 
+    border: none; 
+    padding: 10px 24px; 
+    border-radius: 4px; 
+    font-weight: 500; 
+    cursor: pointer; 
+    margin-top: 20px;
+  }
+  
+  button:hover { background-color: #1765cc; }
+</style>
+
+<div class="card">
+  <h1>Hello!</h1>
+  <p>This is a live preview of your HTML.</p>
+  <p>Click any element here to find it in the code.</p>
+  <button onclick="alert('It works!')">Test Button</button>
+</div>
+                </textarea>
+            </div>
+        </div>
+
+        <div class="resizer" id="resizer"></div>
+
+        <div class="preview-pane" id="preview-pane">
+            <div class="pane-header">Live Preview</div>
+            <iframe id="preview"></iframe>
+        </div>
+
+    </div>
+
+    <script>
+        // --- Elements ---
+        const editor = document.getElementById('editor');
+        const lineNumbers = document.getElementById('line-numbers');
+        const preview = document.getElementById('preview');
+        
+        // Resizable Elements
+        const resizer = document.getElementById('resizer');
+        const editorPane = document.getElementById('editor-pane');
+        const workspace = document.getElementById('workspace');
+
+        // --- 1. Resizable Logic ---
+        let isResizing = false;
+
+        resizer.addEventListener('mousedown', (e) => {
+            isResizing = true;
+            document.body.style.cursor = 'col-resize';
+            preview.style.pointerEvents = 'none'; // Prevent iframe capturing mouse events
+            // Add a visual cue to the resizer
+            resizer.style.background = '#1a73e8';
+        });
+
+        document.addEventListener('mousemove', (e) => {
+            if (!isResizing) return;
+            
+            const containerOffset = workspace.offsetLeft;
+            const newWidth = e.clientX - containerOffset;
+            
+            // Constrain width
+            if (newWidth > 100 && newWidth < workspace.offsetWidth - 100) {
+                editorPane.style.width = `${newWidth}px`;
+                editorPane.style.flex = 'none'; 
+            }
+        });
+
+        document.addEventListener('mouseup', () => {
+            if (isResizing) {
+                isResizing = false;
+                document.body.style.cursor = 'default';
+                preview.style.pointerEvents = 'auto';
+                resizer.style.background = 'transparent'; // Reset color
+            }
+        });
+
+        // --- 2. Line Numbers Sync ---
+        const updateLineNumbers = () => {
+            const lines = editor.value.split('\n').length;
+            lineNumbers.innerHTML = Array(lines).fill(0).map((_, i) => i + 1).join('<br>');
+        };
+
+        const syncScroll = () => {
+            lineNumbers.scrollTop = editor.scrollTop;
+        };
+
+        editor.addEventListener('input', updateLineNumbers);
+        editor.addEventListener('scroll', syncScroll);
+        // Initial init
+        updateLineNumbers();
+
+        // --- 3. Live Preview & Inspector Logic ---
+        function updatePreview() {
+            const code = editor.value;
+            
+            // We inject a script to handle the click events inside the iframe
+            const inspectorScript = `
+                <script>
+                    document.addEventListener('click', function(e) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        
+                        const target = e.target;
+                        // Avoid selecting the body/html tags as they are too generic
+                        if(target.tagName === 'BODY' || target.tagName === 'HTML') return;
+
+                        const data = {
+                            tagName: target.tagName.toLowerCase(),
+                            text: target.innerText ? target.innerText.substring(0, 20) : '',
+                            outerHTML: target.outerHTML
+                        };
+
+                        window.parent.postMessage({ type: 'element-clicked', data: data }, '*');
+                    }, true);
+                    
+                    // Add Google-like selection outline on hover
+                    const style = document.createElement('style');
+                    style.innerHTML = "*:hover { outline: 2px solid #1a73e8 !important; cursor: pointer; } body:hover, html:hover { outline: none !important; cursor: default; }";
+                    document.head.appendChild(style);
+                <\/script>
+            `;
+
+            const fullContent = code + inspectorScript;
+            
+            const doc = preview.contentDocument || preview.contentWindow.document;
+            doc.open();
+            doc.write(fullContent);
+            doc.close();
+        }
+
+        editor.addEventListener('input', updatePreview);
+        updatePreview();
+
+        // --- 4. Reverse Highlight (Inspector) Logic ---
+        window.addEventListener('message', (event) => {
+            if (event.data && event.data.type === 'element-clicked') {
+                findAndHighlight(event.data.data);
+            }
+        });
+
+        function findAndHighlight(data) {
+            const code = editor.value;
+            let index = -1;
+
+            // 1. Try to find by text content first (most accurate for user content)
+            if (data.text) {
+                const searchStr = data.text.trim();
+                index = code.indexOf(searchStr);
+                
+                // Backtrack to find the opening tag
+                if (index !== -1) {
+                    const tagStart = code.lastIndexOf("<" + data.tagName, index);
+                    if (tagStart !== -1) index = tagStart;
+                }
+            }
+            
+            // 2. Fallback: Find by tag name
+            if (index === -1) {
+                index = code.indexOf("<" + data.tagName);
+            }
+
+            // 3. Highlight
+            if (index !== -1) {
+                editor.focus();
+                
+                // Find close of the tag
+                let end = code.indexOf(">", index) + 1;
+                editor.setSelectionRange(index, end);
+                
+                // Scroll into view logic
+                const lineHeight = 21; // Approx line height for Roboto Mono 14px
+                const linesBefore = code.substring(0, index).split("\n").length;
+                
+                // Center the selection
+                editor.scrollTop = (linesBefore * lineHeight) - (editor.clientHeight / 2);
+            }
+        }
+    </script>
+</body>
+</html>
